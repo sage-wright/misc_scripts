@@ -87,6 +87,6 @@ def main():
     highest_coverage_levels[sample] = compare_against_truth(one_sample, truth_sample)
       
   print(highest_coverage_levels)
-  print("predicted LOD: " + str(max(highest_coverage_levels.values())))
+  print("coverage level where drop-out occurs: " + str(max(highest_coverage_levels.values())))
     
 main()
