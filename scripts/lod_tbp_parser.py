@@ -1,6 +1,6 @@
 import pandas as pd
 import argparse
-import os 
+import os
 import sys
 
 def get_input_args():
@@ -15,7 +15,7 @@ def get_input_args():
 
 def import_suffixes(suffix_file):
   with open(suffix_file, 'r') as file:
-    suffixes = [suffix.rstrip() for suffix in file]  
+    suffixes = [suffix.rstrip() for suffix in file]
   return suffixes
 
 def compare_against_truth(one_sample, truth_sample):
@@ -116,18 +116,18 @@ def main():
   # import the combined laboratorian reports
   original_df = pd.read_csv(options.laboratorian_reports, na_filter=False)
 
-  # remove all WT mutations 
+  # remove all WT mutations
   original_df = original_df[original_df["tbprofiler_variant_substitution_nt"] != "WT"]
   sort_df(original_df, options.output)
 
-  suffixes = import_suffixes(options.suffix_file) 
-    
+  suffixes = import_suffixes(options.suffix_file)
+
   suffixes.append(options.truth)
   # get list of sample IDs without any and all suffixes
   all_sample_ids = original_df["sample_id"]
   for suffix in suffixes:
     all_sample_ids = all_sample_ids.str.removesuffix(suffix)
-  
+
   sample_ids = set(all_sample_ids.unique())
   #print("\n".join(sample_ids))
   # for each sample ID, extract the data and compare the suffixes
