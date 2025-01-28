@@ -38,39 +38,17 @@ def compare_against_truth(one_sample, truth_sample):
     truth_freq = float(truth_sample[truth_sample["tbprofiler_variant_substitution_nt"] == mutation]["frequency"].values[0])
     truth_read_support = int(truth_mutations[truth_mutations["tbprofiler_variant_substitution_nt"] == mutation]["read_support"].values[0])
 
-    # Call false negatives if there are ZERO subsamples (mutations not found in subsamples, but exist in reference sample)
-    if not any(one_sample["sample_id"].unique()):
-      mutation_dictionary[mutation] = [mutation, gene_name, "N/A", "N/A", "N/A", "N/A", truth_depth, truth_read_support, truth_freq]
-      continue
+    # Ordering by coverage levels.
+    sorted_samples = sorted(one_sample["sample_id"].unique(), key=lambda x: int(x.split('_')[-1]))
 
-    # If there are subsamples, check if the truth mutation is found in any of them.
-    for suffix in one_sample["sample_id"].unique():
-      coverage_level = int(suffix.split("_")[-1])
-      sample = one_sample[one_sample["sample_id"].str.endswith(suffix)]
-
-      sample_depth = sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["depth"]
-      sample_depth = "N/A" if sample_depth.empty else int(sample_depth.values[0])
-
-      sample_freq = sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["frequency"]
-      sample_freq = "N/A" if sample_freq.empty else float(sample_freq.values[0])
-
-      sample_read_support = sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["read_support"]
-      sample_read_support = "N/A" if sample_read_support.empty else int(sample_read_support.values[0])
-
-      # If the truth mutation is not found in the subsamples (FN), remove the old coverage level as it does not apply anymore.
-      if sample_depth == "N/A":
-        coverage_level = "N/A"
-
-      # Adds FN and TP to the mutation_dictionary if the mutation is not already in the dictionary.
-      if mutation not in mutation_dictionary:
-        mutation_dictionary[mutation] = [mutation, gene_name, coverage_level, sample_depth, sample_read_support, sample_freq, truth_depth, truth_read_support, truth_freq]
-
-      # Dont overwrite mutation_dictionary with a FN, but always update a FN if a TP exists, or the coverage level is lower.
-      elif coverage_level != "N/A" and (mutation_dictionary[mutation][2] == "N/A" or coverage_level < mutation_dictionary[mutation][2]):
-          mutation_dictionary[mutation] = [mutation, gene_name, coverage_level, sample_depth, sample_read_support, sample_freq, truth_depth, truth_read_support, truth_freq]
+    true_positives = []
+    for suffix in sorted_samples:
+      # Checking if mutation exists in the subsamples dataframe (looking for True positives). If it does, append True, else False. see below.
+      true_positives.append(True if mutation in one_sample[one_sample["sample_id"].str.endswith(suffix)]["tbprofiler_variant_substitution_nt"].values else False)
 
       # If the mutation is found in the subsample, but not in the reference, it is a false positive.
-      false_positives = sample[~sample["tbprofiler_variant_substitution_nt"].isin(truth_mutations["tbprofiler_variant_substitution_nt"])]
+      temp_sample = one_sample[one_sample["sample_id"].str.endswith(suffix)]
+      false_positives = temp_sample[~temp_sample["tbprofiler_variant_substitution_nt"].isin(truth_mutations["tbprofiler_variant_substitution_nt"])]
       if not false_positives.empty:
         fp_sample = false_positives[false_positives["sample_id"].str.endswith(suffix)]
 
@@ -86,27 +64,32 @@ def compare_against_truth(one_sample, truth_sample):
           mutation_dictionary[fp_mutation] = [fp_mutation, fp_gene_name, fp_coverage_level, fp_depth, fp_read_support, fp_freq, "N/A", "N/A", "N/A"]
         elif fp_coverage_level < mutation_dictionary[fp_mutation][2]:
             mutation_dictionary[fp_mutation] = [fp_mutation, fp_gene_name, fp_coverage_level, fp_depth, fp_read_support, fp_freq, "N/A", "N/A", "N/A"]
-  return mutation_dictionary
-  # print([_ for _ in mutation_dictionary[mutation]])
-  # try:
-  #   print("Highest coverage level where a mutation was NOT found:", max(mutation_dictionary.values()))
-  #   return max(mutation_dictionary.values())
 
-  # except:
-  #   if (len(truth_mutations["tbprofiler_variant_substitution_nt"]) == len(mutation_dictionary)):
-  #     print("the number of truth mutations ({}) matched the number of mutations in the mutation_dictionary ({})".format(len(truth_mutations["tbprofiler_variant_substitution_nt"]), len(mutation_dictionary)))
-  #     return 0
-  #   else:
-  #     print("CAUTION!!!!!!! the number of truth mutations ({}) did not match the number of mutations in the mutation_dictionary ({})".format(len(truth_mutations["tbprofiler_variant_substitution_nt"]), len(mutation_dictionary)))
-  #     print("these mutations were not found in the subsampled data:")
-  #     print(truth_mutations)
-  #     return 999
-    
+    # The index of the last "False" value in this list will correspond to the highest coverage level where the mutation was NOT found.
+    # Catches situations where the mutation disappears and then reappears - we want to count LOD at the coverage level right before it disappears for the first time.
+    # If False is not found in the list, the mutation was not found in any subsamples (False Negative). Also calls false negatives if there are ZERO subsamples.
+    try:
+      last_false_index = len(true_positives) - true_positives[::-1].index(False) - 1
+
+      # This is the subsample that has the lowest coverage level where the mutation was found (while considering disappearances).
+      sample_choice = sorted_samples[last_false_index + 1]
+    except (ValueError, IndexError) as e:
+      mutation_dictionary[mutation] = [mutation, gene_name, "N/A", "N/A", "N/A", "N/A", truth_depth, truth_read_support, truth_freq]
+      continue
+
+    coverage_level = int(sample_choice.split("_")[-1])
+    sample = one_sample[one_sample["sample_id"].str.endswith(sample_choice)]
+    sample_depth = int(sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["depth"].values[0])
+    sample_freq = float(sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["frequency"].values[0])
+    sample_read_support = int(sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["read_support"].values[0])
+    mutation_dictionary[mutation] = [mutation, gene_name, coverage_level, sample_depth, sample_read_support, sample_freq, truth_depth, truth_read_support, truth_freq]
+  return mutation_dictionary
+
 def sort_df(original_df, prefix):
   original_df["coverage_level"] = original_df["sample_id"].str.split("_").str[-1].replace("full", 999).apply(lambda x: int(x))
   original_df["sample_name"] = original_df["sample_id"].str.split("_").str[0]
   #print(original_df["coverage_level"].unique())
-  
+
   sorted_df = original_df.sort_values(by=["sample_name", "tbprofiler_variant_substitution_nt", "antimicrobial", "coverage_level"], ascending=[True, True, True, False], ignore_index=True)
   filename = prefix + ".sorted_laboratorian_reports.csv"
   sorted_df.to_csv(filename, index=False)
@@ -133,13 +116,8 @@ def main():
   # for each sample ID, extract the data and compare the suffixes
   lowest_coverage_levels = {}
 
-  print("Hello! You're running `lod_tbp_parser.py`\n")
-  print("the following lists take the following format: ")
-  print("[reference sample name] {'mutation': [coverage level where mutation was not found, 'read support for that mutation in the reference sample'], ...}\n")
-
   for sample in sample_ids:
     one_sample = original_df[original_df["sample_id"].str.startswith(sample)]
-    print(f"Evaluating {sample}")
     # compare to the truth sample
     truth_sample = one_sample[one_sample["sample_id"].str.endswith(options.truth)]
     one_sample = one_sample[~one_sample["sample_id"].str.endswith(options.truth)]
@@ -152,34 +130,40 @@ def main():
   for sample in lowest_coverage_levels:
     lowest_coverage_levels[sample] = dict(sorted(lowest_coverage_levels[sample].items(), key=lambda item: item[1][2] if item[1][2] != "N/A" else float('inf')))
 
+  # Loop through sorted dictionary and print out the results.
   with open("mutation_results.csv", "w") as f:
     header = ["Sample," "Mutation", "Gene," "Coverage Level," "Sample Depth," "Sample Read Support," "Sample Frequency," "Reference Depth," "Reference Read Support," "Reference Frequency"]
     print(",".join(header), file=f)
+
     for sample, results in lowest_coverage_levels.items():
       print(f"{sample}", file=f)
+      print(f"Sample: {sample}")
+
+      highest_coverage = max(results.items(), key=lambda item: item[1][2] if item[1][2] != "N/A" else float('inf'))
+      highest_depth = max(results.items(), key=lambda item: item[1][3] if item[1][3] != "N/A" else float('inf'))
+      highest_read_support = max(results.items(), key=lambda item: item[1][4] if item[1][4] != "N/A" else float('inf'))
+      highest_freq = max(results.items(), key=lambda item: item[1][5] if item[1][5] != "N/A" else float('inf'))
+
+      print(f"Highest coverage level where a mutation was found before FN result:\t {highest_coverage[1][2]} [{highest_coverage[1][0]}]")
+      print(f"Highest sample depth where a mutation was found before FN result:\t {highest_depth[1][3]} [{highest_depth[1][0]}]")
+      print(f"Highest read support where a mutation was found before FN result:\t {highest_read_support[1][4]} [{highest_read_support[1][0]}]")
+      print(f"Highest allele frequency where a mutation was found before FN result:\t {highest_freq[1][5]} [{highest_freq[1][0]}]")
+
       for mutation, stats in results.items():
-        extra_info = ","
+        extra_info = " ,"
         #False Negative
         if stats[2] == "N/A":
           extra_info = f"FN,"
-
+          print(f"False Negative: {mutation} | Reference Depth: {stats[6]} | Reference Read Support: {stats[7]} | Reference Frequency: {stats[8]}")
         #False Positive
         elif stats[6] == "N/A":
           extra_info = f"FP,"
+          print(f"False Positive: {mutation} | Coverage Level: {stats[2]} | Sample Depth: {stats[3]} | Sample Read Support: {stats[4]} | Sample Frequency: {stats[5]}")
 
         print(f"{extra_info}" + ",".join(str(_) for _ in stats), file=f)
-      print(f"\n", file=f)
 
-
-  #   print()
-
-  # print("\nthe following dictionary shows the coverage level where drop-out occurs for each sample\n")
-  # print("it has the following format:")
-  # print("sample: [coverage level where drop-out occurs, read support at that coverage level]")
-  # print("OR")
-  # print("sample: coverage level where drop-out occurs (999 indicates certain mutations were only found in the reference sample)\n")
-  # print(highest_coverage_levels)
-  # print("coverage level where drop-out occurs: " + str(max(result[0] if type(result) is list else result for result in highest_coverage_levels.values())))
+      print("\n", file=f)
+      print("\n")
 
 if __name__ == "__main__":
   main()
