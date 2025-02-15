@@ -39,7 +39,7 @@ def get_highest_fn_stats(header, results, stat_type):
 
   if fn_stats:
     # sometimes there are more than one mutation with the same highest 'stat' value - report the first and the count of duplicates
-    dupe_max_count = sum(1 for _ in results.values() if _[stat_index[stat_type]] == fn_stats[1][stat_index[stat_type]]) - 1 
+    dupe_max_count = sum(1 for _ in results.values() if _[stat_index[stat_type]] == fn_stats[1][stat_index[stat_type]] and _[10] == "FN" and _[0] != "-") - 1
     # metrics = "{stat_type}", "Gene", ("AA-Mutation" or "NT-Mutation")
     metrics = (
       f"{fn_stats[1][stat_index[stat_type]]} "
