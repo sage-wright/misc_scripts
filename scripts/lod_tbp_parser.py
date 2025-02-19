@@ -58,7 +58,7 @@ def import_suffixes(suffix_file):
     suffixes = [suffix.rstrip() for suffix in file]
   return suffixes
 
-def compare_against_truth(one_sample, truth_sample, min_cov_lvl=None):
+def compare_against_truth(base_sample_name, suffixes, one_sample, truth_sample, min_cov_lvl=None):
   # extract all of the data for a single sample
   # for each mutation in the truth sample, check the other suffixes that found the mutation and keep track of when it is not found
   truth_sample = truth_sample.drop_duplicates(
@@ -78,10 +78,18 @@ def compare_against_truth(one_sample, truth_sample, min_cov_lvl=None):
   if min_cov_lvl:
     one_sample = one_sample[one_sample["sample_id"].str.split("_").str[-1].astype(int) >= min_cov_lvl]
 
+  # Ordered by (descending) coverage levels.
+  sorted_samples = []
+  for suffix in suffixes:
+    sorted_samples.append(f"{base_sample_name}{suffix}")
+  sorted_samples = sorted(sorted_samples, key=lambda x: int(x.split('_')[-1]), reverse=True)
+
+  # this dictionary has the mutation as the key and stores the highest coverage level before a mutation was last found (along with read support,frequency, etc.)
+  mutation_dictionary = {}
+
+  # All mutations found in the truth sample/reference
   truth_mutations = truth_sample[["tbprofiler_variant_substitution_nt", "read_support"]]
   truth_mutations = truth_mutations.drop_duplicates(subset=['tbprofiler_variant_substitution_nt'], ignore_index=True)
-  # this dictionary has the mutation as the key and the LOWEST coverage level where the mutation was found and the mutation's read support at that coverage level
-  mutation_dictionary = {}
 
   for mutation in truth_mutations["tbprofiler_variant_substitution_nt"]:
     aa_mutation = truth_sample[truth_sample["tbprofiler_variant_substitution_nt"] == mutation]["tbprofiler_variant_substitution_aa"].values[0]
@@ -89,37 +97,11 @@ def compare_against_truth(one_sample, truth_sample, min_cov_lvl=None):
     truth_depth = int(float(truth_sample[truth_sample["tbprofiler_variant_substitution_nt"] == mutation]["depth"].values[0]))
     truth_freq = float(truth_sample[truth_sample["tbprofiler_variant_substitution_nt"] == mutation]["frequency"].values[0])
     truth_read_support = int(float(truth_mutations[truth_mutations["tbprofiler_variant_substitution_nt"] == mutation]["read_support"].values[0]))
-    # Ordered by (ascending) coverage levels.
-    sorted_samples = sorted(one_sample["sample_id"].unique(), key=lambda x: int(x.split('_')[-1]))
 
     true_positives = []
-    for suffix in sorted_samples:
+    for sample_id in sorted_samples:
       # Checking if mutation exists in the subsamples dataframe (looking for True positives). If it does, append True, else False. see below.
-      true_positives.append(True if mutation in one_sample[one_sample["sample_id"].str.endswith(suffix)]["tbprofiler_variant_substitution_nt"].values else False)
-
-      # If the mutation is found in the subsample, but not in the reference, it is a false positive.
-      temp_sample = one_sample[one_sample["sample_id"].str.endswith(suffix)]
-      false_positives = temp_sample[~temp_sample["tbprofiler_variant_substitution_nt"].isin(truth_mutations["tbprofiler_variant_substitution_nt"])]
-
-      if not false_positives.empty:
-        fp_mutations = false_positives["tbprofiler_variant_substitution_nt"].unique()
-        for fp_mutation in fp_mutations:
-          fp_sample = false_positives[false_positives["tbprofiler_variant_substitution_nt"] == fp_mutation]
-          if len(fp_sample) > 1:
-            print("Something went wrong. You shouldn't be here.")
-            breakpoint()
-          fp_aa_mutation = fp_sample["tbprofiler_variant_substitution_aa"].values[0]
-          fp_gene_name = fp_sample["tbprofiler_gene_name"].values[0]
-          fp_coverage_level = int(fp_sample["sample_id"].str.split("_").str[-1].values[0])
-          fp_depth = int(float(fp_sample["depth"].values[0]))
-          fp_read_support = int(float(fp_sample["read_support"].values[0]))
-          fp_freq = float(fp_sample["frequency"].values[0])
-
-          # Add highest coverage FP subsample to the mutation_dictionary
-          if fp_mutation not in mutation_dictionary:
-            mutation_dictionary[fp_mutation] = [fp_coverage_level, fp_gene_name, fp_mutation, fp_aa_mutation, fp_depth, fp_read_support, fp_freq, "-", "-", "-", "FP"]
-          elif fp_coverage_level > mutation_dictionary[fp_mutation][0]:
-            mutation_dictionary[fp_mutation] = [fp_coverage_level, fp_gene_name, fp_mutation, fp_aa_mutation, fp_depth, fp_read_support, fp_freq, "-", "-", "-", "FP"]
+      true_positives.append(True if mutation in one_sample[one_sample["sample_id"] == sample_id]["tbprofiler_variant_substitution_nt"].values else False)
 
     if all(true_positives):
       pass
@@ -127,11 +109,11 @@ def compare_against_truth(one_sample, truth_sample, min_cov_lvl=None):
     elif any(true_positives) and not all(true_positives):
       # The index of the last "False" value in this list will correspond to the highest coverage level where the mutation was NOT found.
       # Catches situations where the mutation disappears and then reappears - we want to count LOD at the coverage level right before it disappears for the first time.
-      last_false_index = len(true_positives) - true_positives[::-1].index(False) - 1
+      first_false_index = true_positives.index(False)
 
       # This is the subsample that has the lowest coverage level where the mutation was found (while considering disappearances).
-      # Will definitely be have a False value by this point - labeling the subsample as FN (even though its technically FP)
-      sample_choice = sorted_samples[last_false_index + 1]
+      # Will definitely have a False value by this point - labeling the subsample as FN (even though its technically TP
+      sample_choice = sorted_samples[first_false_index - 1]
       coverage_level = int(sample_choice.split("_")[-1])
       sample = one_sample[one_sample["sample_id"].str.endswith(sample_choice)]
       sample_depth = int(float(sample[sample["tbprofiler_variant_substitution_nt"] == mutation]["depth"].values[0]))
@@ -145,6 +127,24 @@ def compare_against_truth(one_sample, truth_sample, min_cov_lvl=None):
     else:
       print("Something went wrong. You shouldn't be here.")
       breakpoint()
+
+  # If the mutation is found in the subsample, but not in the reference, it is a false positive.
+  false_positives = one_sample[~one_sample['tbprofiler_variant_substitution_nt'].isin(truth_mutations["tbprofiler_variant_substitution_nt"])]
+  if not false_positives.empty:
+    for i, fp_sample in false_positives.iterrows():
+      fp_mutation = fp_sample["tbprofiler_variant_substitution_nt"]
+      fp_aa_mutation = fp_sample["tbprofiler_variant_substitution_aa"]
+      fp_gene_name = fp_sample["tbprofiler_gene_name"]
+      fp_coverage_level = int(fp_sample["sample_id"].split("_")[-1])
+      fp_depth = int(float(fp_sample["depth"]))
+      fp_read_support = int(float(fp_sample["read_support"]))
+      fp_freq = float(fp_sample["frequency"])
+
+      # Add highest coverage FP subsample to the mutation_dictionary
+      if fp_mutation not in mutation_dictionary:
+        mutation_dictionary[fp_mutation] = [fp_coverage_level, fp_gene_name, fp_mutation, fp_aa_mutation, fp_depth, fp_read_support, fp_freq, "-", "-", "-", "FP"]
+      elif fp_coverage_level > mutation_dictionary[fp_mutation][0]:
+        mutation_dictionary[fp_mutation] = [fp_coverage_level, fp_gene_name, fp_mutation, fp_aa_mutation, fp_depth, fp_read_support, fp_freq, "-", "-", "-", "FP"]
   return mutation_dictionary
 
 def sort_df(original_df, prefix):
@@ -167,11 +167,11 @@ def main():
 
   suffixes = import_suffixes(options.suffix_file)
 
-  suffixes.append(options.truth)
   # get list of sample IDs without any and all suffixes
   all_sample_ids = original_df["sample_id"]
   for suffix in suffixes:
     all_sample_ids = all_sample_ids.str.removesuffix(suffix)
+  all_sample_ids = all_sample_ids.str.removesuffix(options.truth)
 
   sample_ids = set(all_sample_ids.unique())
   #print("\n".join(sample_ids))
@@ -183,7 +183,7 @@ def main():
     # compare to the truth sample
     truth_sample = one_sample[one_sample["sample_id"].str.endswith(options.truth)]
     one_sample = one_sample[~one_sample["sample_id"].str.endswith(options.truth)]
-    lowest_coverage_levels[sample] = compare_against_truth(one_sample, truth_sample, options.min_cov_lvl)
+    lowest_coverage_levels[sample] = compare_against_truth(sample, suffixes, one_sample, truth_sample, options.min_cov_lvl)
 
   # sort by sample name first.
   lowest_coverage_levels = dict(sorted(lowest_coverage_levels.items()))
