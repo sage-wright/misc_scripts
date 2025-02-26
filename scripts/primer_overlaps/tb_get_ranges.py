@@ -1,6 +1,6 @@
 import pandas as pd
 
-primer_file = pd.read_csv("/home/sage_wright/github/misc_scripts/scripts/primer_overlaps/tb_primers-nymain.bed", sep="\t", header=None)
+primer_file = pd.read_csv("/home/sage_wright/github/misc_scripts/scripts/primer_overlaps/cdc.bed", sep="\t", header=None)
 primers = pd.DataFrame(primer_file)
 
 # extract regions from primer file

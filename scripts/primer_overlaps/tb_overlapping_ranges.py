@@ -5,7 +5,7 @@ overlaps = {}
 def check_overlap(a, b, c, d):
   return max(a, c) <= min(b, d)
 
-with open("/home/sage_wright/github/misc_scripts/scripts/primer_overlaps/tb-ranges-nymain.tsv") as ranges:
+with open("/home/sage_wright/github/misc_scripts/scripts/primer_overlaps/cdc-ranges.tsv") as ranges:
   for line in ranges:
     line = line.strip().split('\t')
     gene = line[0]
