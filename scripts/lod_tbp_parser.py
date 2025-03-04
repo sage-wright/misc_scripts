@@ -12,6 +12,7 @@ def get_input_args():
   parser.add_argument('suffix_file', type=str, help='path to the suffix file; one line per suffix')
   parser.add_argument('truth', type=str, help='the suffix that is considered the ground truth')
   parser.add_argument('-mcl', '--min_cov_lvl', type=int, required=False, help='the minimum down-sampling level to consider')
+  parser.add_argument('-l', '--lims_only', required=False, action='store_true', help='only include genes for LIMS')
   return parser.parse_args()
 
 def get_highest_fn_stats(header, results, stat_type):
@@ -147,14 +148,13 @@ def compare_against_truth(base_sample_name, suffixes, one_sample, truth_sample, 
         mutation_dictionary[fp_mutation] = [fp_coverage_level, fp_gene_name, fp_mutation, fp_aa_mutation, fp_depth, fp_read_support, fp_freq, "-", "-", "-", "FP"]
   return mutation_dictionary
 
-def sort_df(original_df, prefix):
-  original_df["coverage_level"] = original_df["sample_id"].str.split("_").str[-1].replace("full", 999).apply(lambda x: int(x))
-  original_df["sample_name"] = original_df["sample_id"].str.split("_").str[0]
-  #print(original_df["coverage_level"].unique())
-
-  sorted_df = original_df.sort_values(by=["sample_name", "tbprofiler_variant_substitution_nt", "antimicrobial", "coverage_level"], ascending=[True, True, True, False], ignore_index=True)
-  filename = prefix + ".sorted_laboratorian_reports.csv"
-  sorted_df.to_csv(filename, index=False)
+# def sort_df(original_df, prefix):
+#   original_df["coverage_level"] = original_df["sample_id"].str.split("_").str[-1].replace("full", 999).apply(lambda x: int(x))
+#   original_df["sample_name"] = original_df["sample_id"].str.split("_").str[0]
+#   #print(original_df["coverage_level"].unique())
+#   sorted_df = original_df.sort_values(by=["sample_name", "tbprofiler_variant_substitution_nt", "antimicrobial", "coverage_level"], ascending=[True, True, True, False], ignore_index=True)
+#   filename = prefix + ".sorted_laboratorian_reports.csv"
+#   sorted_df.to_csv(filename, index=False)
 
 def main():
   options = get_input_args()
@@ -163,6 +163,13 @@ def main():
 
   # remove all WT mutations
   original_df = original_df[original_df["tbprofiler_variant_substitution_nt"] != "WT"]
+  if options.lims_only:
+    GENES_FOR_LIMS_WGS = [
+      "atpE", "eis", "embA", "embB", "ethA", "fabG1", "gyrA",
+      "gyrB", "inhA", "katG", "mmpL5", "mmpS5", "pepQ",
+      "pncA", "rplC", "rpoB", "rrl", "rrs", "Rv0678", "tlyA"
+    ]
+    original_df = original_df[original_df["tbprofiler_gene_name"].isin(GENES_FOR_LIMS_WGS)]
   #sort_df(original_df, options.output)
 
   suffixes = import_suffixes(options.suffix_file)
