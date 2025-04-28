@@ -265,19 +265,19 @@ def compare_tree_manifests(old_manifest, new_manifest):
 
     for new_path, new_node in new_flat.items():
         old_node = old_flat.get(new_path)
+        new_size = new_node.get('size') or new_node.get('total_size')
         
         if old_node is None:
             added_files[new_path] = {
                 "previous_date": None,
                 "previous_size": None,
-                "size_difference": None
+                "size_difference": calculate_size_difference('0B', new_size)
             }
             logging.debug("Added new file/dir: %s", new_path)
             
         else:
             old_size = old_node.get('size') or old_node.get('total_size')
-            new_size = new_node.get('size') or new_node.get('total_size')
-
+            
             old_last_modified = old_node.get('last_modified')
             new_last_modified = new_node.get('last_modified')
 
@@ -307,7 +307,7 @@ def compare_tree_manifests(old_manifest, new_manifest):
         "added_files": added_files,
         "deleted_files": deleted_files,
         "updated_files": updated_files,
-        "total_number_of_files": len(added_files) + len(deleted_files) + len(updated_files)
+        "total_number_of_changed_files": len(added_files) + len(deleted_files) + len(updated_files)
     }
 
     return changes_summary
@@ -332,6 +332,8 @@ def generate_manifest(bucket_name, output_file, max_files, collapse_all, directo
 
     manifest = build_tree(blobs, bucket_name, max_files, collapse_all, directory_to_collapse)
 
+    manifest['total_number_of_files'] = len(blobs)
+    
     changes = []
     if previous_manifest_path:
         logging.info("Previous manifest provided. Attempting to load and compare: %s", previous_manifest_path)
@@ -344,7 +346,6 @@ def generate_manifest(bucket_name, output_file, max_files, collapse_all, directo
             logging.error("Failed to load or compare previous manifest: %s", str(e))
 
     manifest['changed_files'] = changes or {}
-    manifest['total_number_of_files'] = len(blobs)
 
     with open(output_file, 'w') as f:
         yaml.dump(manifest, f, default_flow_style=False, sort_keys=False)
