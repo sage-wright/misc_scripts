@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument("-o", "--output", type=str, default="manifest.yaml", help="Output YAML file path (default: 'manifest.yaml')")
     parser.add_argument("-m", "--max-files", type=int, default=5, help="Max number of files before a directory is collapsed (default: >= 5)")
     parser.add_argument("-c", "--collapse-all", action="store_true", help="Collapse all directories if max_files is met or exceeded (default: False)")
-    parser.add_argument("-d", "--directory-to-collapse", type=str, default=None, help="Collapse all files in indicated directory if max_files is met or exceeded (default: None)")
+    parser.add_argument("-d", "--directory-to-collapse", nargs="*", default=[], help="Collapse all files in indicated directories (space-delimited) if max_files is met or exceeded (default: None)")
     parser.add_argument("-p", "--previous-manifest", type=str, default=None, help="Path to a previous YAML manifest file for change detection (default: None)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging output (default: False)")
     return parser.parse_args()
@@ -145,7 +145,7 @@ def build_tree(blob_list, bucket, max_files, collapse_all, directory_to_collapse
             else:
                 current_node = current_node[part]['children']
 
-    def collapse_large_dirs(node, path=""):
+    def collapse_large_dirs(node, path="", collapse_dir=None):
         """Recursively collapse large directories into summarized entires if they exceed max_files.
 
         Args:
@@ -158,7 +158,7 @@ def build_tree(blob_list, bucket, max_files, collapse_all, directory_to_collapse
         for key, child in list(node['children'].items()):
             if child['type'] == 'directory':
                 subpath = child['path'].replace(f'gs://{bucket}/', '').strip('/')
-                collapse_large_dirs(child, subpath)
+                collapse_large_dirs(child, subpath, collapse_dir)
 
         all_children_are_files = all(
             child.get('type') != 'directory'
@@ -168,10 +168,10 @@ def build_tree(blob_list, bucket, max_files, collapse_all, directory_to_collapse
         if all_children_are_files and len(node['children']) >= max_files:
             should_collapse = (
                 collapse_all or
-                (directory_to_collapse and directory_to_collapse in path)
+                (collapse_dir and collapse_dir in path)
             )
 
-            logging.debug("Checking collapse for path: %s | Should collapse: %s", path, should_collapse)
+            logging.debug("Checking collapse (%s) for path: %s | Should collapse: %s", collapse_dir, path, should_collapse)
             if should_collapse:
                 blobs = dir_to_blobs.get(path, [])
                 if blobs:
@@ -218,8 +218,12 @@ def build_tree(blob_list, bucket, max_files, collapse_all, directory_to_collapse
     
     update_directory_sizes(root)
     
-    if collapse_all or directory_to_collapse is not None:
-        collapse_large_dirs(root)
+    if collapse_all or len(directory_to_collapse) > 0:
+        if len(directory_to_collapse) > 0:
+            for directory in directory_to_collapse:
+                collapse_large_dirs(root, collapse_dir=directory)
+        else:
+            collapse_large_dirs(root)
   
     return root
 
@@ -354,6 +358,7 @@ def generate_manifest(bucket_name, output_file, max_files, collapse_all, directo
 
 if __name__ == '__main__':
     args = parse_args()
+    collapse_dirs = set(args.directory_to_collapse)
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     else:
@@ -363,6 +368,6 @@ if __name__ == '__main__':
         output_file=args.output, 
         max_files=args.max_files,
         collapse_all=args.collapse_all,
-        directory_to_collapse=args.directory_to_collapse.strip('/').strip() if args.directory_to_collapse else None,
+        directory_to_collapse=set(args.directory_to_collapse),
         previous_manifest_path=args.previous_manifest
     )
