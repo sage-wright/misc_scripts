@@ -1,4 +1,3 @@
-import os
 import yaml
 from google.cloud import storage
 from datetime import datetime, timezone
@@ -45,6 +44,50 @@ def human_readable_size(size_in_bytes):
         return "{}MB".format(round(size_in_mb, 2))
     size_in_gb = size_in_mb / 1024
     return "{}GB".format(round(size_in_gb, 2))
+
+def convert_size_to_bytes(size_str):
+    """Convert a size string (B, KB, MB, GB) into bytes.
+    
+    Args:
+        size_str (str): Size string (e.g., '10KB', '5MB', '2GB').
+
+    Returns:
+        int: The size in bytes.
+    """
+    if size_str.endswith('KB'):
+        return int(float(size_str[:-2]) * 1024)
+    elif size_str.endswith('MB'):
+        return int(float(size_str[:-2]) * 1024 * 1024)
+    elif size_str.endswith('GB'):
+        return int(float(size_str[:-2]) * 1024 * 1024 * 1024)
+    elif size_str.endswith('B'):
+        return int(float(size_str[:-1]))
+    return 0 
+
+def calculate_size_difference(old_size, new_size):
+    """Calculate the size difference between the old and new size.
+    
+    Args:
+        old_size (str): The previous size (as a string with units like 'KB', 'MB', 'GB').
+        new_size (str): The new size (as a string with units like 'KB', 'MB', 'GB').
+
+    Returns:
+        str: A string representing the size difference with a "+" or "-" sign, or "null" if no change.
+    """
+    if old_size is None or new_size is None:
+        return "null"
+
+    old_size_bytes = convert_size_to_bytes(old_size)
+    new_size_bytes = convert_size_to_bytes(new_size)
+
+    size_diff = new_size_bytes - old_size_bytes
+
+    if size_diff > 0:
+        return f"+{human_readable_size(size_diff)}"
+    elif size_diff < 0:
+        return f"{human_readable_size(size_diff)}"
+    else:
+        return 0
 
 def build_tree(blob_list, bucket, max_files, collapse_all, directory_to_collapse):
     """Build a nested dictionary representing the structure of a GCS bucket.
@@ -201,55 +244,16 @@ def flatten_manifest(manifest):
     recurse(manifest)
     return flat
 
-def calculate_size_difference(old_size, new_size):
-    """Calculate the size difference between the old and new size.
-    
-    Args:
-        old_size (str): The previous size (as a string with units like 'KB', 'MB', 'GB').
-        new_size (str): The new size (as a string with units like 'KB', 'MB', 'GB').
-
-    Returns:
-        str: A string representing the size difference with a "+" or "-" sign, or "null" if no change.
-    """
-    if old_size is None or new_size is None:
-        return "null"
-
-    # Convert sizes to bytes for comparison
-    old_size_bytes = convert_size_to_bytes(old_size)
-    new_size_bytes = convert_size_to_bytes(new_size)
-
-    # Calculate the difference
-    size_diff = new_size_bytes - old_size_bytes
-
-    # Determine the sign (+/-)
-    if size_diff > 0:
-        return f"+{human_readable_size(size_diff)}"
-    elif size_diff < 0:
-        return f"{human_readable_size(size_diff)}"
-    else:
-        return 0
-
-def convert_size_to_bytes(size_str):
-    """Convert a size string (KB, MB, GB) into bytes.
-    
-    Args:
-        size_str (str): Size string (e.g., '10KB', '5MB', '2GB').
-
-    Returns:
-        int: The size in bytes.
-    """
-    if size_str.endswith('KB'):
-        return int(float(size_str[:-2]) * 1024)
-    elif size_str.endswith('MB'):
-        return int(float(size_str[:-2]) * 1024 * 1024)
-    elif size_str.endswith('GB'):
-        return int(float(size_str[:-2]) * 1024 * 1024 * 1024)
-    elif size_str.endswith('B'):
-        return int(float(size_str[:-1]))
-    return 0  # Default to 0 if unrecognized format
-
 def compare_tree_manifests(old_manifest, new_manifest):
-    """Compare two GCS bucket manifests to detect changes between them."""
+    """Compare two flattened manifests to identify added, deleted, and updated files.
+
+    Args:
+        old_manifest (dict): Old manifest tree.
+        new_manifest (dict): New manifest tree.
+
+    Returns:
+        dict: dictionary containing added, deleted, and updated files with their metadata.
+    """
     logging.info("Starting comparison of manifests...")
     
     old_flat = flatten_manifest(old_manifest)
@@ -259,18 +263,17 @@ def compare_tree_manifests(old_manifest, new_manifest):
     deleted_files = {}
     updated_files = {}
 
-    # Check for added or updated files/directories
     for new_path, new_node in new_flat.items():
         old_node = old_flat.get(new_path)
         
         if old_node is None:
-            # New file/dir added
             added_files[new_path] = {
                 "previous_date": None,
                 "previous_size": None,
                 "size_difference": None
             }
             logging.debug("Added new file/dir: %s", new_path)
+            
         else:
             old_size = old_node.get('size') or old_node.get('total_size')
             new_size = new_node.get('size') or new_node.get('total_size')
@@ -278,22 +281,19 @@ def compare_tree_manifests(old_manifest, new_manifest):
             old_last_modified = old_node.get('last_modified')
             new_last_modified = new_node.get('last_modified')
 
-            if old_size != new_size or old_last_modified != new_last_modified:
-                change_type = 'updated'
-                
+            if old_size != new_size or old_last_modified != new_last_modified:                
                 updated_files[new_path] = {
                     "previous_date": old_last_modified,
                     "previous_size": old_size,
                     "size_difference": calculate_size_difference(old_size, new_size)
                 }
                 
-                if 'children' not in new_node:  # If it's a collapsed directory (no child files)
+                if 'children' not in new_node:  # if it's a collapsed directory there are no child files
                     logging.debug("Updated directory summary detected: %s (collapsed directory)", new_path)
                     logging.info("Collapsed directory summary updated: %s | Size difference: %s", new_path, calculate_size_difference(old_size, new_size))
                 else:
                     logging.debug("Updated file detected: %s", new_path)
     
-    # Check for deleted files
     for old_path, old_node in old_flat.items():
         if old_path not in new_flat:
             deleted_files[old_path] = {
@@ -303,7 +303,6 @@ def compare_tree_manifests(old_manifest, new_manifest):
             }
             logging.debug("Deleted file/dir: %s", old_path)
 
-    # Combine results into the summary format you want
     changes_summary = {
         "added_files": added_files,
         "deleted_files": deleted_files,
