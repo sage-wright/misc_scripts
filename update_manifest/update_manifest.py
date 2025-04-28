@@ -269,7 +269,7 @@ def compare_tree_manifests(old_manifest, new_manifest):
         
         if old_node is None:
             added_files[new_path] = {
-                "previous_date": None,
+                "previous_last_modified": None,
                 "previous_size": None,
                 "size_difference": calculate_size_difference('0B', new_size)
             }
@@ -283,7 +283,7 @@ def compare_tree_manifests(old_manifest, new_manifest):
 
             if old_size != new_size or old_last_modified != new_last_modified:                
                 updated_files[new_path] = {
-                    "previous_date": old_last_modified,
+                    "previous_last_modified": old_last_modified,
                     "previous_size": old_size,
                     "size_difference": calculate_size_difference(old_size, new_size)
                 }
@@ -297,7 +297,7 @@ def compare_tree_manifests(old_manifest, new_manifest):
     for old_path, old_node in old_flat.items():
         if old_path not in new_flat:
             deleted_files[old_path] = {
-                "previous_date": old_node.get('last_modified'),
+                "previous_last_modified": old_node.get('last_modified'),
                 "previous_size": old_node.get('size') or old_node.get('total_size'),
                 "size_difference": None
             }
