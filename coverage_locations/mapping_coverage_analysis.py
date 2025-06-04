@@ -112,13 +112,34 @@ def parse_overlapping_regions(bam_file, primer_positions, min_base_quality, min_
             if overlaps(feature.location, feature2.location):
                 # get the overlapping regions
                 loci, loci2 = get_split_regions(feature.location, feature2.location)
+
+                # gene 1
                 primer_specific[gene]["ovl_region"] += (loci["overlapping"])
-                primer_specific[gene]["non_ovl_region"] += (loci["non_overlapping"])
+
+                if primer_specific[gene]["non_ovl_region"]:
+                    new_non_ovl_region = FeatureLocation(
+                        max(loci["non_overlapping"][0].start, primer_specific[gene]["non_ovl_region"][0].start),
+                        min(loci["non_overlapping"][0].end, primer_specific[gene]["non_ovl_region"][0].end),
+                    )
+                    primer_specific[gene]["non_ovl_region"] = [new_non_ovl_region]
+                else:
+                    primer_specific[gene]["non_ovl_region"] = loci["non_overlapping"]
+
                 primer_specific[gene]["ovl_gene"].append(gene2)
                 primer_specific[gene]["unique_reads"] = set()
 
+                # gene 2
                 primer_specific[gene2]["ovl_region"] += loci2["overlapping"]
-                primer_specific[gene2]["non_ovl_region"] += loci2["non_overlapping"]
+
+                if primer_specific[gene2]["non_ovl_region"]:
+                    new_non_ovl_region = SeqFeature(FeatureLocation(
+                        max(loci2["non_overlapping"][0].start, primer_specific[gene2]["non_ovl_region"][0].start),
+                        min(loci2["non_overlapping"][0].end, primer_specific[gene2]["non_ovl_region"][0].end),
+                    ))
+                    primer_specific[gene2]["non_ovl_region"] = [new_non_ovl_region]
+                else:
+                    primer_specific[gene2]["non_ovl_region"] = loci2["non_overlapping"]
+
                 primer_specific[gene2]["ovl_gene"].append(gene)
                 primer_specific[gene2]["unique_reads"] = set()
 
@@ -127,20 +148,20 @@ def parse_overlapping_regions(bam_file, primer_positions, min_base_quality, min_
     for gene, feature in primer_positions.items():
         # process genes with identified non-overlapping regions
         if gene in primer_specific and primer_specific[gene]["non_ovl_region"]:
-            for region in primer_specific[gene]["non_ovl_region"]:
-                non_ovl_start = region.start
-                non_ovl_end = region.end
+            region = primer_specific[gene]["non_ovl_region"][0]
+            non_ovl_start = region.start
+            non_ovl_end = region.end
 
-                for rec in bam.pileup(
-                    contig=chrom,
-                    start=int(non_ovl_start),
-                    end=int(non_ovl_end),
-                    min_base_quality=min_base_quality,
-                    min_mapping_quality=min_mapping_quality,
-                    truncate=True,
-                    until_eof=True,
-                ):
-                    primer_specific[gene]["unique_reads"].update(rec.get_query_names())
+            for rec in bam.pileup(
+                contig=chrom,
+                start=int(non_ovl_start),
+                end=int(non_ovl_end),
+                min_base_quality=min_base_quality,
+                min_mapping_quality=min_mapping_quality,
+                truncate=True,
+                until_eof=True,
+            ):
+                primer_specific[gene]["unique_reads"].update(rec.get_query_names())
 
     return primer_specific
 
@@ -254,6 +275,7 @@ def __main__():
     primer_range_file = args.primer_range_file
     min_base_quality = args.min_base_quality
     min_mapping_quality = args.min_mapping_quality
+    ignore_overlaps = args.ignore_overlaps
     assay = args.assay
     
     samples = {}
@@ -288,7 +310,7 @@ def __main__():
     primer_positions = parse_primer_ranges(primer_range_file)
 
     for bam in sorted(bam_files):
-        if not args.ignore_overlaps:
+        if not ignore_overlaps:
             ovl_regions = parse_overlapping_regions(bam, primer_positions, min_base_quality, min_mapping_quality)
         else:
             ovl_regions = defaultdict(lambda: {"ovl_region": [], "non_ovl_region": [], "ovl_gene": [], "unique_reads": set()})
