@@ -1,6 +1,10 @@
 Hello, and thank you for contributing to Theiagen's Public Health Bioinformatics repository! 
 
+---
+
 Please go to the "PREVIEW" tab to select the appropriate template for your PR.
+
+---
 
 [If your suggested changes involve **CODE CHANGES**, please use the "Code Changes" template.](?expand=1&template=code.md)
 
