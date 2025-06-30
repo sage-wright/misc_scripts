@@ -9,7 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Coverage assessment script")
     parser.add_argument("-b", "--bam_dir", required=True, help="Directory containing BAM files")
     parser.add_argument("-p", "--primer_range_file", required=True, help="Input ('BED-like') primer range file")
-    parser.add_argument("-a", "--assay", required=True, choices=["cdc", "ny3d", "nymain", "cdc_full"], help="Assay type (must be one of: 'cdc', 'ny3d', 'nymain')")
+    parser.add_argument("-a", "--assay", required=True, choices=["cdc_8target", "cdc_20target", "ny3d", "nymain", "cdc_full"], help="Assay type (must be one of: 'cdc', 'ny3d', 'nymain')")
     parser.add_argument("-q", "--min_base_quality", type=int, default=0, help="Bases below the minimum quality will not be counted (default: 0)")
     parser.add_argument("-m", "--min_mapping_quality", type=int, default=0, help="Only use reads above a minimum mapping quality. (default: 0)")
     parser.add_argument("--ignore_overlaps", action="store_true", help="Ignore overlapping primer regions (default: False)")
@@ -281,29 +281,36 @@ def __main__():
     samples = {}
 
     genes_of_interest = []
-    if assay == "cdc":
+    if assay == "cdc_8target":
         genes_of_interest = [
-        	"gyrB", "gyrA", "rpoB-170", "rpoB-RRDR",
-        	"inhA", "fabG1","katG", "pncA",
+            "gyrB", "gyrA", "rpoB-170", "rpoB-RRDR",
+            "inhA", "fabG1","katG", "pncA",
+        ]
+    elif assay == "cdc_20target":
+        genes_of_interest = [
+            "atpE", "eis", "embB", "fabG", "gyrA", "gyrB",
+            "inhA", "katG1", "katG2", "katG3", "katG4", "pncA",
+            "rplC_1", "rplC_2", "rpoB170", "rpoB-RRDR",
+            "rrl_1", "rrl_2", "rrs", "rv0678",
+        ]
+    elif assay == "cdc_full":
+        genes_of_interest = [
+            "ahpC", "atpE", "eis", "embB", "fabG", "gyrA", "gyrB",
+            "inhA", "katG1", "katG2", "katG3", "katG4", "pncA",
+            "rplC_1", "rplC_2", "rpoB170", "rpoB-RRDR",
+            "rrl_1", "rrl_2", "rrs", "rv0678",
         ]
     elif assay == "ny3d":
         genes_of_interest = [
-        	"rpoB-RD1", "rpoB-RD2", "katG-RD1", "katG-RD2",
-        	"gyrA-RD1", "gyrA-RD2", "gyrB", "inhA",
+            "rpoB-RD1", "rpoB-RD2", "katG-RD1", "katG-RD2",
+            "gyrA-RD1", "gyrA-RD2", "gyrB", "inhA",
         ]
     elif assay == "nymain":
         genes_of_interest = [
-        	"gyrB", "gyrA", "rpoB", "rpsL", "rrs", "inhA", 
-        	"fabG1","katG", "pncA", "eis", "ahpC", "oxyR'", 
-        	"embC", "embA", "embB", "ethA",
+            "gyrB", "gyrA", "rpoB", "rpsL", "rrs", "inhA",
+            "fabG1","katG", "pncA", "eis", "ahpC", "oxyR'",
+            "embC", "embA", "embB", "ethA",
         ]
-    elif assay == "cdc_full":
-      genes_of_interest = [
-        "ahpC", "atpE", "eis", "embB", "fabG", "gyrA", "gyrB",
-        "inhA", "katG1", "katG2", "katG3", "katG4", "pncA",
-        "rplC_1", "rplC_2", "rpoB170", "rpoB-RRDR",
-        "rrl_1", "rrl_2", "rrs", "rv0678",
-      ]
     else:
         raise ValueError("Assay type must be one of: 'cdc', 'ny3d', 'nymain'")
 
