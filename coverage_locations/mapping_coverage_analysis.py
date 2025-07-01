@@ -185,7 +185,7 @@ def parse_bam(bam_file, primer_positions, primer_specific, min_base_quality, min
         "Query Coverage 50x", "Query Coverage 100x", "Query Coverage 200x", "Query Coverage 500x", "Query Coverage 1000x"
     ]
     print(f"{sample_name}")
-    print(f"{'\t'.join(header)}")
+    print('\t'.join(header))
     
     # check if the BAM file is indexed
     bam = pysam.AlignmentFile(bam_file)
@@ -251,7 +251,7 @@ def parse_bam(bam_file, primer_positions, primer_specific, min_base_quality, min
             f"[{primer_start},{primer_end}]", f"{stats[gene]['avg']:.2f}", f"{stats[gene]['med']}", f"{stats[gene]['min']}", f"{stats[gene]['max']}",
             f"{stats[gene]['50x']:.2f}", f"{stats[gene]['100x']:.2f}", f"{stats[gene]['200x']:.2f}", f"{stats[gene]['500x']:.2f}", f"{stats[gene]['1000x']:.2f}"
         ]
-        print(f"{'\t'.join([str(x) for x in deliverables])}")
+        print('\t'.join([str(x) for x in deliverables]))
 
     # Calculate average coverage across all loci
     final_avg = np.mean([stats[gene]["avg"] for gene in stats])
