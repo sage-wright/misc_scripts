@@ -9,7 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Coverage assessment script")
     parser.add_argument("-b", "--bam_dir", required=True, help="Directory containing BAM files")
     parser.add_argument("-p", "--primer_range_file", required=True, help="Input ('BED-like') primer range file")
-    parser.add_argument("-a", "--assay", required=True, choices=["cdc_8target", "cdc_20target", "ny3d", "nymain", "cdc_full"], help="Assay type (must be one of: 'cdc', 'ny3d', 'nymain')")
+    parser.add_argument("-a", "--assay", required=True, choices=["cdc_8target", "cdc_20target", "ny3d", "nymain", "cdc_full", "rpob_pnca"], help="Assay type (must be one of: 'cdc', 'ny3d', 'nymain')")
     parser.add_argument("-q", "--min_base_quality", type=int, default=0, help="Bases below the minimum quality will not be counted (default: 0)")
     parser.add_argument("-m", "--min_mapping_quality", type=int, default=0, help="Only use reads above a minimum mapping quality. (default: 0)")
     parser.add_argument("--ignore_overlaps", action="store_true", help="Ignore overlapping primer regions (default: False)")
@@ -310,6 +310,10 @@ def __main__():
             "gyrB", "gyrA", "rpoB", "rpsL", "rrs", "inhA",
             "fabG1","katG", "pncA", "eis", "ahpC", "oxyR'",
             "embC", "embA", "embB", "ethA",
+        ]
+    elif assay == "rpob_pnca":
+        genes_of_interest = [
+            "pncA", "rpoB170", "rpoB-RRDR",
         ]
     else:
         raise ValueError("Assay type must be one of: 'cdc', 'ny3d', 'nymain'")
