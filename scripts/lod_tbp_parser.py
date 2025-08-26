@@ -206,11 +206,9 @@ def main():
 
   # Loop through sorted dictionary and print out the results.
   with open(options.output, "w") as f:
-    header = ["Sample", "Down-sampling Level", "Gene", "NT-Mutation", "AA-Mutation", "Sample Depth", "Sample Read Support", "Sample Frequency", "Reference Depth", "Reference Read Support", "Reference Frequency", "Status"]
-    print(",".join(header), file=f)
-
     for sample, results in lowest_coverage_levels.items():
-      print(f"{sample}", file=f)
+      header = [sample, "Down-sampling Level", "Gene", "NT-Mutation", "AA-Mutation", "Sample Depth", "Sample Read Support", "Sample Frequency", "Reference Depth", "Reference Read Support", "Reference Frequency", "Status"]
+      print(",".join(header), file=f)
       print(f"Sample: {sample}")
 
       fn_count = 0
