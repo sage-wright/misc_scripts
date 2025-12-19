@@ -112,6 +112,11 @@ def compare_against_truth(base_sample_name, suffixes, one_sample, truth_sample, 
       # Catches situations where the mutation disappears and then reappears - we want to count LOD at the coverage level right before it disappears for the first time.
       first_false_index = true_positives.index(False)
 
+      # if the first false index is 0, that means the mutation was not found at the highest coverage level - label as FN. (have only seen this while testing tNGS data)
+      if first_false_index == 0:
+        mutation_dictionary[mutation] = ["-", gene_name, mutation, aa_mutation, "-", "-", "-", truth_depth, truth_read_support, truth_freq, "FN"]
+        continue
+
       # This is the subsample that has the lowest coverage level where the mutation was found (while considering disappearances).
       # Will definitely have a False value by this point - labeling the subsample as FN (even though its technically TP
       sample_choice = sorted_samples[first_false_index - 1]
@@ -163,6 +168,13 @@ def main():
 
   # remove all WT mutations
   original_df = original_df[original_df["tbprofiler_variant_substitution_nt"] != "WT"]
+
+  # remove all NA mutations
+  original_df = original_df[original_df["tbprofiler_variant_substitution_nt"] != "NA"]
+
+  # remove all warnings about mutations outside the expected region
+  original_df = original_df[~original_df["warning"].str.contains("This mutation is outside the expected region")]
+
   if options.lims_only:
     GENES_FOR_LIMS_WGS = [
       "atpE", "eis", "embA", "embB", "ethA", "fabG1", "gyrA",
